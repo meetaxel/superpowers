@@ -1,4 +1,26 @@
-# Superpowers
+# Superpowers - Fixed Version
+
+Personal fork of [obra/superpowers](https://github.com/obra/superpowers), based on v7.0.2 (commit `22f0b463e7a5e579904dd6211a520321035526f7`). Original project by Jesse Vincent and contributors at Prime Radiant. The original [MIT license](LICENSE), copyright notice, and project history are preserved. This fork is not an official upstream release.
+
+## Fixes in this fork
+
+- **Safer session cleanup:** `stop-server.sh` refuses recursive deletion when a `/tmp/` session path contains a `..` segment. The verified server still stops, and normal temporary-session cleanup still works. This is a targeted path guard, not a general filesystem security guarantee.
+- **Encoded filenames:** the brainstorming server decodes percent-encoded `/files/` names, so filenames containing spaces work. Malformed encoding returns 404; dotfiles and outside-directory content remain blocked by the existing file checks.
+- **Missing-directory crash handling:** a WebSocket choice event no longer terminates the server when its state directory has disappeared. Failed writes are logged. An HTTP request error guard also returns an error response instead of letting an uncaught filesystem error stop the process.
+
+Regression tests were added in `tests/brainstorm-server/robustness.test.js` and `stop-server.test.sh`; the robustness tests are included in the test command.
+
+## Verification and limits
+
+The targeted regressions passed on Linux: robustness **4/4**, stop-server **10/10**. The original review also passed WebSocket protocol **32/32**, helper **15/15**, browser launcher **3/3**, branding **7/7**, start-server **8/8**, and the session-start hook, skill-layout, skill-size, shell-lint, and SDD helper-path checks.
+
+The full suite has **not** been verified: auth/server/lifecycle JavaScript tests require the `ws` development dependency and were skipped. The version-bump check failed in the review environment due to a jq/yq compatibility issue and was not investigated. ShellCheck was unavailable; Windows was not tested. The HTTP mid-request file-removal guard has no deterministic regression test. Passing these checks does not mean the whole project is bug-free or security-audited.
+
+The original documentation below is retained for context. Its marketplace and upstream installation commands generally install the original project, not this fork. No software is installed by creating or viewing this repository.
+
+---
+
+## Original project README
 
 Superpowers is a complete software development methodology for your coding agents, built on top of a set of composable skills and some initial instructions that make sure your agent uses them.
 
