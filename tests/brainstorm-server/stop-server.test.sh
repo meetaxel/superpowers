@@ -178,5 +178,53 @@ else
   bad "killed process despite malformed instance id" "$OUT"
 fi
 
+# --- Test 5: a /tmp-prefixed path with ".." must NOT be rm -rf'd ---
+# /tmp/<outer>/../<victim> matches the /tmp/* glob but resolves outside the
+# intended session dir. The server is stopped, but the directory must stay.
+OUTER="$(mktemp -d /tmp/stop-outer.XXXXXX)"; track_dir "$OUTER"
+REAL="$(mktemp -d /tmp/stop-victim.XXXXXX)"; track_dir "$REAL"
+mkdir -p "$REAL/content" "$REAL/state"
+SERVER_ID="$(new_server_id)"
+printf '%s\n' "$SERVER_ID" > "$REAL/state/server-instance-id"
+echo keep > "$REAL/keep.txt"
+BRAINSTORM_DIR="$REAL" BRAINSTORM_PORT=0 node "$SERVER" "--brainstorm-server-id=$SERVER_ID" > /dev/null 2>&1 &
+SRV=$!
+track_pid "$SRV"
+disown "$SRV" 2>/dev/null || true
+for _ in $(seq 1 40); do [[ -f "$REAL/state/server-info" ]] && break; sleep 0.1; done
+echo "$SRV" > "$REAL/state/server.pid"
+OUT="$("$STOP" "$OUTER/../$(basename "$REAL")")"
+sleep 0.3
+if [[ -f "$REAL/keep.txt" ]]; then
+  ok "session path containing '..' is not recursively deleted"
+else
+  bad "session path containing '..' was rm -rf'd" "$OUT"
+fi
+if kill -0 "$SRV" 2>/dev/null; then
+  bad "server with '..' session path was not stopped" "$OUT"
+else
+  untrack_pid "$SRV"; ok "server with '..' session path is still stopped"
+fi
+
+# --- Test 6: a normal /tmp session dir is still cleaned up ---
+SESS="$(mktemp -d /tmp/stop-normal.XXXXXX)"; track_dir "$SESS"
+mkdir -p "$SESS/content" "$SESS/state"
+SERVER_ID="$(new_server_id)"
+printf '%s\n' "$SERVER_ID" > "$SESS/state/server-instance-id"
+BRAINSTORM_DIR="$SESS" BRAINSTORM_PORT=0 node "$SERVER" "--brainstorm-server-id=$SERVER_ID" > /dev/null 2>&1 &
+SRV=$!
+track_pid "$SRV"
+disown "$SRV" 2>/dev/null || true
+for _ in $(seq 1 40); do [[ -f "$SESS/state/server-info" ]] && break; sleep 0.1; done
+echo "$SRV" > "$SESS/state/server.pid"
+OUT="$("$STOP" "$SESS")"
+sleep 0.3
+untrack_pid "$SRV"
+if [[ ! -d "$SESS" && "$OUT" == *stopped* ]]; then
+  ok "normal /tmp session dir is still deleted on stop"
+else
+  bad "normal /tmp cleanup regressed" "$OUT"
+fi
+
 echo "--- Results: $PASS passed, $FAIL failed ---"
 [ "$FAIL" -eq 0 ] || exit 1
