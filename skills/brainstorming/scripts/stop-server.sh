@@ -110,7 +110,8 @@ if [[ -f "$PID_FILE" ]]; then
   mark_stopped "stop-server.sh"
 
   # Only delete ephemeral /tmp directories
-  if [[ "$SESSION_DIR" == /tmp/* ]]; then
+  # Reject ".." segments: /tmp/../x matches /tmp/* but resolves outside /tmp.
+  if [[ "$SESSION_DIR" == /tmp/* && "$SESSION_DIR" != */../* && "$SESSION_DIR" != */.. ]]; then
     rm -rf "$SESSION_DIR"
   fi
 
