@@ -385,6 +385,17 @@ function isAllowedWebSocketOrigin(req) {
 // ========== HTTP Request Handler ==========
 
 function handleRequest(req, res) {
+  try {
+    handleRequestUnsafe(req, res);
+  } catch (e) {
+    // A file removed between check and read must not take the server down.
+    console.error('Request failed:', e.message);
+    if (!res.headersSent) res.writeHead(500, securityHeaders());
+    res.end('Internal error');
+  }
+}
+
+function handleRequestUnsafe(req, res) {
   if (!isAuthorized(req)) {
     res.writeHead(403, securityHeaders({ 'Content-Type': 'text/html; charset=utf-8' }));
     res.end(FORBIDDEN_PAGE);
@@ -418,7 +429,15 @@ function handleRequest(req, res) {
     res.writeHead(200, securityHeaders({ 'Content-Type': 'text/html; charset=utf-8' }));
     res.end(html);
   } else if (req.method === 'GET' && pathname.startsWith('/files/')) {
-    const fileName = path.basename(pathname.slice(7));
+    let fileName;
+    try {
+      // Screen authors reference files with spaces etc., which browsers send percent-encoded.
+      fileName = path.basename(decodeURIComponent(pathname.slice(7)));
+    } catch (e) {
+      res.writeHead(404, securityHeaders());
+      res.end('Not found');
+      return;
+    }
     const filePath = path.join(CONTENT_DIR, fileName);
     // Reject empty/dotfile names and anything that isn't a regular file —
     // `/files/` would otherwise resolve to CONTENT_DIR and crash readFileSync (EISDIR).
@@ -512,7 +531,11 @@ function handleMessage(text) {
   console.log(JSON.stringify({ source: 'user-event', ...event }));
   if (event && event.choice) {
     const eventsFile = path.join(STATE_DIR, 'events');
-    fs.appendFileSync(eventsFile, JSON.stringify(event) + '\n');
+    try {
+      fs.appendFileSync(eventsFile, JSON.stringify(event) + '\n');
+    } catch (e) {
+      console.error('Failed to record event:', e.message);
+    }
   }
 }
 
